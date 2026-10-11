@@ -1,8 +1,19 @@
-# Phase 0 architecture
+# Application architecture — Phase 1A
 
 The homepage is a static Server Component. It renders site configuration and small
 presentation components; it does not create a Supabase client. Missing credentials
 must never prevent the initial homepage from building or rendering.
+
+The Phase 1A foundation adds `src/features/auth` and `src/features/rooms` without
+changing the homepage. Auth helpers restore verified identity or explicitly create
+an anonymous session. Room adapters use typed, authenticated Supabase clients and
+reviewed RPCs; they never write tables directly. The database is the authorization
+boundary. Nicknames and invitation codes do not establish authenticated identity.
+
+`src/proxy.ts` delegates existing-session refresh to `src/lib/supabase/proxy.ts`.
+Cookie writes reach both downstream requests and browser responses, and auth
+responses stay private/non-cacheable. Proxy is not an authorization gate; each
+room operation verifies its user and RLS independently limits data access.
 
 `src/app` owns routing and page composition. `src/components/ui` owns reusable
 presentation. `src/lib/config` holds shared metadata and environment validation.
@@ -15,12 +26,12 @@ thin adapters that verify identity and delegate work. Shared code moves into `li
 only when more than one real feature needs it. Domain operations must not depend on
 styling or animation. Keep any future animation behavior in presentation components.
 
-## Planned boundaries (not implemented)
+## Feature boundaries
 
 | Feature | Responsibility |
 | --- | --- |
-| rooms | Create/join, room lifecycle, room-scoped authorization |
-| participants | Identity, membership, session recovery |
+| rooms | Create/join/read data foundation implemented; UI and lifecycle operations remain future work |
+| auth / participants | Anonymous identity/session helpers and membership schema implemented; recovery UI remains future work |
 | tasks | Assignment and card drawing |
 | contributions | Shared contribution contracts; separate who, what, when, where, how, feeling modules |
 | gallery | Room-scoped memory display and media access |
@@ -36,11 +47,33 @@ membership through RLS and storage policies, not browser filtering alone. Treat
 realtime updates as synchronized views of persisted state rather than the source
 of truth. Resolve concurrent state transitions on the server/database.
 
-Start Phase 1 with the room and participant model, including privacy, anonymous or
-authenticated identity, invite-code rules, recovery, and room isolation. Add real
-database migrations, generated types, and policy tests together. Implement cookie
-session refresh and verified server-side identity before protected actions. Then
-implement create/join, graceful error handling, reconnect behavior, and realtime
-membership. Keep both homepage buttons disabled until those workflows exist.
+The migrations and policy tests now define the initial room/participant model and
+invitation rules. Database types currently mirror that migration manually; regenerate
+them from Supabase after reviewed application. No live schema changes have occurred.
+See `supabase.md` for policy details and deployment checks. Next, validate the hosted
+Auth/PostgREST/cookie boundary, then implement create/join, errors, reconnect behavior,
+and realtime membership. Keep both homepage buttons disabled until workflows exist.
 
-No future feature directories or database objects are created in Phase 0.
+No contribution, AI, media, conversation, or voting feature directories are created.
+
+## Admission and identity coordination
+
+A second migration enforces per-Auth-user fixed-window request budgets and retained
+room/member quotas using private administrator-only tables. Requests lock configuration,
+then the actor counter, then the target room; future write RPCs must preserve this order.
+Domain rejections return error_code so failed attempts remain counted after commit.
+Adapters turn those outcomes into failures. Transactional faults/timeouts roll back.
+RPC locks time out after 2 seconds; PostgREST RPC statements default to 5 seconds,
+with an 8-second role ceiling and preservation of stricter existing limits.
+
+All Supabase clients share production Secure/SameSite Lax cookie options and private
+cache headers. Initial anonymous signup uses an origin Web Lock and a non-secret
+interrupted-attempt marker. Existing sessions are verified again after waiting;
+unsupported coordination fails closed for new signup, and interrupted signup needs
+an explicit user retry. No lease expiry can permit a competing signup. Modern mobile
+browsers use the same primitives over HTTPS. Room data is never statically cached.
+
+Records are retained until approved administrator maintenance; finished rooms count
+toward quotas. Organizer Auth deletion is restricted while referenced rooms exist.
+There is no automatic cleanup or ownership transfer. See supabase.md for the exact
+migration order, limits, session-loss behavior, and approved live connection procedure.

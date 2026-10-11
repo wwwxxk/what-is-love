@@ -2,9 +2,11 @@
 
 A collaborative transmedia storytelling experience about love and belonging.
 
-Phase 0 provides the application foundation and a responsive homepage. Room creation,
-joining, contributions, multiplayer, and AI are **not implemented**. Both homepage
-actions are disabled and explicitly marked as coming in the next phase.
+Phase 1A adds a version-controlled backend foundation: SQL migrations, anonymous Auth
+session helpers, cookie refresh, RLS, and typed room creation/joining/read operations.
+The migrations have **not been applied to the live Supabase project**. The Phase 0
+homepage is unchanged; both actions remain disabled. Room UI, contributions,
+realtime subscriptions, and AI are not implemented.
 
 ## Development
 
@@ -31,6 +33,16 @@ to display the homepage. System fonts and local SVG artwork avoid font/CDN reque
 reload. For a future forwarded host, add only its specific hostname to
 `allowedDevOrigins` if needed; do not allow every origin.
 
+For a long-running cloud session, keep terminal output connected or launch with
+logging so an orphaned terminal cannot cause write errors:
+
+```bash
+nohup npm run dev > /tmp/what-is-love-dev.log 2>&1 < /dev/null &
+tail -n 20 /tmp/what-is-love-dev.log
+```
+
+Validate an existing instance before starting another; do not kill unrelated processes.
+
 In this Codex cloud onboarding environment, the UI does not provide a web preview
 for loopback addresses. Starting the server and requesting it from the shell verifies
 the app, but does not create a public preview URL. If your Codex client provides a
@@ -49,13 +61,18 @@ Windows users can override it with `npm ci --cache <writable-directory>`.
 npm run lint
 npm run typecheck
 npm test
+npm run test:db # Requires Docker; runs against an isolated disposable PostgreSQL 17
 npm run build
 npm start
 ```
 
-`npm test` runs Node's built-in test runner against environment validation: missing
-and placeholder configuration, partial configuration, valid origins, public-key
-requirements, unsafe URLs, and local development URLs. No live database is contacted.
+`npm test` runs 34 checks for environment validation, room status/code/nickname
+validation, verified session recovery, RPC argument boundaries, and cookie/cache
+handling. Auth transport in these unit tests uses test-only contract fixtures.
+`npm run test:db` runs 28 checks against real PostgreSQL in a network-isolated,
+ephemeral Docker container: migrations, RLS, privileges, concurrency, unique
+membership, collision retries, and rollback. It never reads a live database URL.
+No live Supabase project is contacted. See `docs/supabase.md` for coverage limits.
 `npm start` serves the production build on port 3000. Stop the development server
 before starting production on the same port. To use another port:
 `npm run dev -- --port 3001` or `npm start -- --port 3001`.
@@ -79,22 +96,36 @@ API secrets in public variables. `.env.local` and other `.env.*` files are ignor
 only the placeholder `.env.example` is tracked. Public configuration must be present
 at build time when a future browser feature uses it.
 
-`src/lib/config/env.ts` validates configuration on demand and returns `null` when
-both values are absent or still placeholders. Partial or malformed configuration
-throws a descriptive error without printing values. Only `sb_publishable_` keys are
-accepted. HTTPS origins are required except for localhost development.
+`src/lib/config/env.ts` validates configuration on demand. Its optional reader returns
+`null` when both values are absent or still placeholders; client factories use the
+required reader and throw a clear configuration error if a database-dependent
+operation is attempted. Partial or malformed configuration also throws without
+printing values. Only `sb_publishable_` keys are accepted. HTTPS origins are required
+except for localhost development.
 
-`src/lib/supabase/client.ts` creates a cookie-based browser client on demand.
+`src/lib/supabase/client.ts` creates a typed cookie-based browser singleton on demand.
 `src/lib/supabase/server.ts` is guarded with `server-only` and prepares a per-request
-client for future Route Handlers / Server Actions that can write response cookies.
-It is not intended for read-only Server Components. Neither utility is imported
-by the homepage, and no database request is made in Phase 0. Before authentication
-is implemented, add session refresh handling and server-side identity verification
-following Supabase's current Next.js guidance. A browser session alone is not an
-authorization check. Generated database types can be added after a schema exists.
+client for future Route Handlers. Pass a mutable `Headers` object and attach it to
+the returned `Response`; this preserves the SDK's non-cacheable auth headers. Use
+this writable-cookie helper only before returning a handler response, not in a
+read-only Server Component. No Server Action or HTTP mutation endpoint is exposed
+in this phase. `src/proxy.ts` refreshes existing sessions using verified `getUser()`
+and forwards updated cookies to both the request and response. It never signs up
+homepage visitors. The homepage itself imports no Supabase client.
 
-No tables, migrations, storage buckets, RLS policies, auth flows, or AI integrations
-have been created. Adding credentials alone does not enable room functionality.
+Review both migrations, in order: `20261011000000_room_foundation.sql`, then
+`20261011010000_room_security_hardening.sql`, and
+[Supabase setup and security](docs/supabase.md) before applying anything. Enable
+Anonymous Sign-Ins in Supabase project settings before live Auth testing. Adding
+credentials alone does not apply migrations or enable homepage room actions.
+No storage buckets, realtime publication changes, or AI integrations are created.
+Database-enforced create/join limits default to 5 attempts/10 minutes and 20/minute
+per authenticated UUID. Private administrator configuration sets quotas of 3 retained
+owned rooms, 10 memberships/user, and 20 members/room. RPC domain rejections return
+an error_code; adapters treat them as failures. All clients share production Secure
+cookies and private auth caching. Initial anonymous signup uses origin Web Locks,
+with explicit retry after interrupted signup. See the linked guide for adjustments,
+compatibility limits, timeouts, and retention policy; no automatic cleanup is added.
 
 ## Project structure
 
@@ -104,11 +135,16 @@ src/
   components/
     home/              Homepage artwork and presentation
     ui/                Reusable Button and Container
+  features/
+    auth/              Verified anonymous participant/session helpers
+    rooms/             Room types, input validation, typed data access
   lib/
     config/            Site metadata, six dimension identifiers, environment validation
-    supabase/          Lazy browser and server client utilities
-tests/                 Configuration validation tests
-docs/architecture.md   Feature boundaries and future implementation guidance
+    supabase/          Typed clients, database types, cookie refresh transport
+  proxy.ts             Next.js session refresh entry point
+supabase/migrations/   Schema, RLS, and trusted create/join RPCs (not applied live)
+tests/                 Unit tests and isolated PostgreSQL policy tests
+docs/                  Architecture and Supabase review/application instructions
 ```
 
 Visual identity is centralized in `src/app/globals.css`: colors, system typography,
@@ -117,8 +153,8 @@ no animation library. Decorative artwork is independent of application logic.
 
 ## Next phase
 
-Implement real Robot Rooms: agree on the room/participant schema and membership
-rules, create migrations and RLS policies, add participant identity and recovery,
-then build validated create/join flows with unguessable room codes and realtime
-membership. Test separate rooms for isolation and reconnect behavior before adding
-contribution modules or AI. See `docs/architecture.md`.
+Review and approve both migrations first, apply them to a staging Supabase project,
+enable anonymous Auth, and run the multi-client live checks in `docs/supabase.md`.
+After those pass, build the create/join UI and waiting lobby, configure Auth abuse protection and
+CAPTCHA before public use, and introduce room-scoped realtime membership. Keep
+the existing actions disabled until their real workflows are available.

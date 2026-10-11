@@ -1,11 +1,14 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-import { getSupabaseConfig } from "@/lib/config/env";
+import { requireSupabaseConfig } from "@/lib/config/env";
+import type { Database } from "./database.types";
+import { getSessionCookieOptions } from "./session-cookie-options";
 
-/** Call from a browser feature when integration is enabled; absent config returns null. */
+/** Cookie-backed singleton: call only from a feature, never on homepage render. */
 export function getSupabaseBrowserClient() {
-  const config = getSupabaseConfig();
-  if (!config) return null;
-  return createBrowserClient(config.url, config.publishableKey);
+  const config = requireSupabaseConfig();
+  return createBrowserClient<Database>(config.url, config.publishableKey, {
+    cookieOptions: getSessionCookieOptions(),
+  });
 }

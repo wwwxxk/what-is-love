@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readSupabaseConfig } from "../src/lib/config/env.ts";
+import { readSupabaseConfig, requireSupabaseConfig } from "../src/lib/config/env.ts";
 
 const valid = {
   NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
@@ -41,5 +41,19 @@ test("malformed and unsafe origins are rejected without exposing values", () => 
 test("local Supabase HTTP origins are supported for future development", () => {
   for (const url of ["http://localhost:54321", "http://127.0.0.1:54321", "http://[::1]:54321"]) {
     assert.equal(readSupabaseConfig({ ...valid, NEXT_PUBLIC_SUPABASE_URL: url }).url, url);
+  }
+});
+
+test("database-dependent client creation fails clearly when configuration is absent", () => {
+  const names = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"];
+  const previous = names.map((name) => process.env[name]);
+  try {
+    for (const name of names) delete process.env[name];
+    assert.throws(requireSupabaseConfig, /Supabase is not configured/);
+  } finally {
+    names.forEach((name, index) => {
+      if (previous[index] === undefined) delete process.env[name];
+      else process.env[name] = previous[index];
+    });
   }
 });
