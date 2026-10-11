@@ -21,7 +21,15 @@ from urllib.request import ProxyHandler, build_opener
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[2]
-APP_PORT, API_PORT = 44116, 44117
+def free_port():
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+APP_PORT, API_PORT = free_port(), free_port()
+while API_PORT == APP_PORT:
+    API_PORT = free_port()
 APP = f"http://127.0.0.1:{APP_PORT}"
 API = f"http://127.0.0.1:{API_PORT}"
 CODE = "ABCDEFGHJKLM"
@@ -33,7 +41,7 @@ STATE = {}
 def reset(mode="normal", seed=False):
     STATE.clear()
     STATE.update(mode=mode, users={}, room=None, members=[], signup=0, creates=0,
-                 joins=0, reads=0, delayed_reads=0)
+                 joins=0, reads=0, delayed_reads=0, snapshots=0, starts=0)
     if seed:
         user = make_user()
         create_fixture_room(user["id"], "River")
@@ -64,7 +72,7 @@ def session(user):
 def create_fixture_room(user_id, nickname):
     instant = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     STATE["room"] = {"id": ROOM_ID, "join_code": CODE, "status": "waiting", "created_by": user_id,
-                     "created_at": instant, "updated_at": instant, "started_at": None}
+                     "created_at": instant, "updated_at": instant, "started_at": None, "room_version": "1"}
     member = {"id": str(uuid.uuid4()), "room_id": ROOM_ID, "auth_user_id": user_id,
               "nickname": nickname, "role": "organizer", "joined_at": instant, "updated_at": instant}
     STATE["members"].append(member)
@@ -137,6 +145,39 @@ class Fixture(BaseHTTPRequestHandler):
         user = self.user()
         if not user:
             return self.reply({"code": "42501", "message": "Authentication required"}, 401)
+        if path == "/rest/v1/rpc/get_robot_room_snapshot":
+            STATE["snapshots"] += 1
+            STATE["reads"] += 1
+            room = STATE["room"]
+            member = next((m for m in STATE["members"] if m["auth_user_id"] == user["id"]), None)
+            if not room or not member or body.get("p_room_id") != ROOM_ID:
+                return self.reply({"room": None, "participant_id": None, "members": None, "room_version": None, "error_code": "room_unavailable"})
+            # Copy represents the snapshot at request dispatch, even if a fixture
+            # deliberately holds its response while the room changes.
+            data = {"room": dict(room), "participant_id": member["id"], "members": [dict(m) for m in STATE["members"]],
+                    "room_version": room["room_version"], "error_code": None}
+            if STATE["mode"] == "snapshot_failure":
+                return self.reply({"code": "fixture_offline", "message": "Offline fixture"}, 503)
+            if STATE["mode"] == "snapshot_delay":
+                time.sleep(2)
+            return self.reply(data)
+        if path == "/rest/v1/rpc/start_robot_room":
+            STATE["starts"] += 1
+            room = STATE["room"]
+            member = next((m for m in STATE["members"] if m["auth_user_id"] == user["id"]), None)
+            if not room or not member or body.get("p_room_id") != ROOM_ID:
+                return self.reply({"room_id": None, "status": None, "started_at": None, "room_version": None, "already_started": None, "error_code": "room_unavailable"})
+            if member["role"] != "organizer" or room["created_by"] != user["id"] or STATE["mode"] == "start_denied":
+                return self.reply({"room_id": None, "status": None, "started_at": None, "room_version": None, "already_started": None, "error_code": "not_organizer"})
+            time.sleep(0.3)
+            already = room["status"] != "waiting"
+            if not already:
+                room.update(status="task_assignment", started_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            room_version=str(int(room["room_version"]) + 1))
+            if STATE["mode"] == "start_uncertain":
+                return self.reply({"message": "Response lost after fixture commit"}, 503)
+            return self.reply({"room_id": ROOM_ID, "status": room["status"], "started_at": room["started_at"],
+                               "room_version": room["room_version"], "already_started": already, "error_code": None})
         if path == "/rest/v1/rpc/create_robot_room":
             STATE["creates"] += 1
             time.sleep(0.35)
@@ -155,7 +196,10 @@ class Fixture(BaseHTTPRequestHandler):
                 member = {"id": str(uuid.uuid4()), "room_id": ROOM_ID, "auth_user_id": user["id"],
                           "nickname": body["p_nickname"], "role": "participant",
                           "joined_at": "2026-10-11T00:00:00Z", "updated_at": "2026-10-11T00:00:00Z"}
+                if STATE["room"]["status"] != "waiting":
+                    return self.reply({"room_id": None, "participant_id": None, "error_code": "room_unavailable"})
                 STATE["members"].append(member)
+                STATE["room"]["room_version"] = str(int(STATE["room"]["room_version"]) + 1)
             return self.reply({"room_id": ROOM_ID, "participant_id": member["id"], "error_code": None})
         self.reply({"message": "Unexpected fixture write"}, 400)
 
@@ -205,7 +249,7 @@ def tests(browser):
         expect(page.get_by_text("QR code invitation", exact=True)).to_be_visible()
 
     def lobby_layout(page, role, width):
-        message = "Your group is gathering. You'll be able to start training together." if role == "organizer" else "Waiting for your group to begin training."
+        message = "Your group is gathering. You can start training whenever you’re ready." if role == "organizer" else "Waiting for your group to begin training."
         status = page.get_by_text(message, exact=True)
         expect(status).to_be_visible()
         members = page.get_by_role("heading", name="In this room").bounding_box()
@@ -215,7 +259,7 @@ def tests(browser):
             assert members["y"] < waiting["y"] < invitation["y"], "Mobile lobby must prioritize members, waiting status, then invitations"
         else:
             assert waiting["y"] < members["y"] and invitation["x"] < members["x"], "Desktop lobby keeps its two-column layout"
-        assert page.get_by_role("button", name="Start training").count() == 0
+        assert page.get_by_role("button", name="Start Training", exact=True).count() == (1 if role == "organizer" else 0)
 
     def qr_disclosure(page):
         summary = page.get_by_text("QR code invitation", exact=True)
@@ -401,9 +445,10 @@ def tests(browser):
         newcomer = make_user()
         STATE["members"].append({"id": str(uuid.uuid4()), "room_id": ROOM_ID, "auth_user_id": newcomer["id"],
                                  "nickname": "Arriving", "role": "participant", "joined_at": "2026-10-11T00:00:00Z", "updated_at": "2026-10-11T00:00:00Z"})
+        STATE["room"]["room_version"] = str(int(STATE["room"]["room_version"]) + 1)
         expect(page.get_by_text("2 members", exact=True)).to_be_visible(timeout=20000)
         before = STATE["reads"]
-        page.evaluate("Object.defineProperty(document, 'visibilityState', {configurable: true, get: () => 'hidden'});")
+        page.evaluate("Object.defineProperty(document, 'visibilityState', {configurable: true, get: () => 'hidden'}); document.dispatchEvent(new Event('visibilitychange'));")
         page.wait_for_timeout(16000)
         assert STATE["reads"] == before
     passed("membership polling updates visible pages and pauses while hidden")

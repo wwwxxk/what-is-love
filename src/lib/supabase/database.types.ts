@@ -9,6 +9,8 @@ export type Room = {
   created_at: string;
   updated_at: string;
   started_at: string | null;
+  // Optional for Phase 1A admission reads before the separately approved upgrade.
+  room_version?: string;
 };
 
 export type RoomParticipant = {
@@ -24,6 +26,14 @@ export type RoomParticipant = {
 type EmptySchema = { [_ in never]: never };
 export type RoomRpcResult = { room_id: string | null; participant_id: string | null; error_code: string | null };
 type MembershipResult = RoomRpcResult[];
+export type SnapshotRpcResult = {
+  room: unknown | null; participant_id: string | null; members: unknown | null;
+  room_version: string | null; error_code: string | null;
+};
+export type StartRoomResult = {
+  room_id: string | null; status: RoomStatus | null; started_at: string | null;
+  room_version: string | null; already_started: boolean | null; error_code: string | null;
+};
 
 export type Database = {
   public: {
@@ -51,6 +61,8 @@ export type Database = {
     Functions: {
       create_robot_room: { Args: { p_nickname: string }; Returns: MembershipResult };
       join_robot_room: { Args: { p_join_code: string; p_nickname: string }; Returns: MembershipResult };
+      get_robot_room_snapshot: { Args: { p_room_id: string }; Returns: SnapshotRpcResult[] };
+      start_robot_room: { Args: { p_room_id: string }; Returns: StartRoomResult[] };
     };
     Enums: { room_status: RoomStatus; participant_role: ParticipantRole };
     CompositeTypes: EmptySchema;

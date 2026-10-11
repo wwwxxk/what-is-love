@@ -3,11 +3,12 @@
 A collaborative transmedia storytelling experience about love and belonging.
 
 Phase 1B implements **Welcome → Create / Join → Waiting Lobby** using the Phase 1A
-anonymous Auth, RLS, and room RPC foundation. The reviewed migrations were applied
-to the development Supabase project and passed the approved minimal API smoke test.
-Homepage actions now navigate to functional flows. Lobby membership is refreshed
-every 15 seconds while visible, with manual refresh. Supabase Realtime, phase
-transitions, contributions, and AI are not implemented.
+anonymous Auth, RLS, and room RPC foundation. Phase 1C adds local implementation of
+private membership-bound room synchronization and organizer-controlled
+**Waiting Lobby → Training Preparation**. The two Phase 1C SQL drafts have been
+tested in isolated PostgreSQL but have **not been deployed**. The application room
+screen now requires their snapshot/start RPCs. Contributions, assignments, and AI
+are outside this phase. See [Phase 1C](docs/phase-1c.md) before hosted testing.
 
 ## Development
 
@@ -63,20 +64,24 @@ npm run lint
 npm run typecheck
 npm test
 npm run test:db # Requires Docker; runs against an isolated disposable PostgreSQL 17
+npm run test:db:phase1c # Baseline plus proposed lifecycle/Realtime SQL; no network
 npm run test:browser # Requires Python Playwright and Chromium; local fixtures only
+npm run test:browser:phase1c # Phase 1B regressions plus mocked private WebSocket flows
 npm run build
 npm start
 ```
 
-`npm test` runs 45 checks for environment validation, room status/code/nickname
+`npm test` runs 69 checks for environment validation, room status/code/nickname
 validation, verified session recovery, RPC argument boundaries, cookie/cache handling,
-creation uncertainty, and lobby access. Auth transport uses test-only fixtures.
+creation uncertainty, lobby access, lifecycle RPCs, and synchronization/recovery.
+Auth transport uses test-only fixtures.
 `npm run test:db` runs 28 checks against real PostgreSQL in a network-isolated,
 ephemeral Docker container: migrations, RLS, privileges, concurrency, unique
 membership, collision retries, and rollback. It never reads a live database URL.
 No live Supabase project is contacted. See `docs/supabase.md` for coverage limits.
 `npm run test:browser` builds with a local fixture URL/key and starts its own servers
-on ports 44116/44117. It blocks non-loopback browser requests; outputs go to `/tmp`.
+on dynamically selected loopback ports. It blocks non-loopback browser requests;
+outputs go to `/tmp`.
 It requires Python Playwright and Chromium, already available in this cloud runtime.
 Because that build embeds fixture configuration, rebuild with your intended public
 configuration before using `npm start` afterward. `npm run dev` reads the current
@@ -126,9 +131,10 @@ Review both migrations, in order: `20261011000000_room_foundation.sql`, then
 [Supabase setup and security](docs/supabase.md) before applying anything. Enable
 Anonymous Sign-Ins in Supabase project settings before live Auth testing. Adding
 credentials alone does not apply migrations. Do not reapply the already deployed
-migrations to the same project. SQL Editor deployment still requires separately
-approved migration-history reconciliation before future CLI migrations.
-No storage buckets, realtime publication changes, or AI integrations are created.
+migrations to the same project. Their migration history has been reconciled according
+to the project's approved Dashboard inspection. Phase 1C drafts require separate
+approval and hosted prerequisite verification; do not execute them during setup.
+No storage buckets, Postgres Changes publications, or AI integrations are created.
 Database-enforced create/join limits default to 5 attempts/10 minutes and 20/minute
 per authenticated UUID. Private administrator configuration sets quotas of 3 retained
 owned rooms, 10 memberships/user, and 20 members/room. RPC domain rejections return
@@ -144,16 +150,16 @@ src/
   app/                 App Router pages, root layout, global design tokens
   components/
     home/              Homepage artwork and presentation
-    rooms/             Create/join forms, recovery, and authenticated waiting lobby
+    rooms/             Create/join forms, recovery, waiting, and Training Preparation
     ui/                Reusable Button and Container
   features/
     auth/              Verified anonymous participant/session helpers
-    rooms/             Room types, input validation, typed data access
+    rooms/             Room validation, typed RPCs, synchronization controller/transport
   lib/
     config/            Site metadata, six dimension identifiers, environment validation
     supabase/          Typed clients, database types, cookie refresh transport
   proxy.ts             Next.js session refresh entry point
-supabase/migrations/   Deployed Phase 1A schema, RLS, and trusted create/join RPCs
+supabase/migrations/   Deployed Phase 1A and undeployed Phase 1C SQL drafts
 tests/                 Unit, isolated PostgreSQL, and local fixture browser tests
 docs/                  Architecture and Supabase review/application instructions
 ```
@@ -164,8 +170,7 @@ no animation library. Decorative artwork is independent of application logic.
 
 ## Next phase
 
-Review Phase 1B, then separately authorize hosted browser checks and test records.
-Phase 1C can add room-scoped Realtime membership and reviewed organizer phase
-transitions. Resolve hosted browser certificate trust and configure Auth abuse
+Review Phase 1C locally, then separately authorize hosted migrations and bounded
+integration tests. Resolve hosted browser certificate trust and configure Auth abuse
 protection and a supported CAPTCHA flow before public use. Keep later storytelling
 features outside the room admission/lobby foundation.

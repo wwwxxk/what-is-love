@@ -1,4 +1,4 @@
-# Application architecture — Phase 1B
+# Application architecture — Phase 1C local implementation
 
 The homepage is a static Server Component. It renders site configuration and small
 presentation components; it does not create a Supabase client. Missing credentials
@@ -30,7 +30,7 @@ styling or animation. Keep any future animation behavior in presentation compone
 
 | Feature | Responsibility |
 | --- | --- |
-| rooms | Create/join/read foundation and waiting UI implemented; lifecycle operations remain future work |
+| rooms | Create/join, authoritative snapshots, private member notifications, organizer start, waiting and Training Preparation |
 | auth / participants | Anonymous identity/session helpers, membership schema, and explicit recovery UI implemented |
 | tasks | Assignment and card drawing |
 | contributions | Shared contribution contracts; separate who, what, when, where, how, feeling modules |
@@ -51,13 +51,19 @@ The migrations and policy tests now define the initial room/participant model an
 invitation rules. Database types currently mirror that migration manually; regenerate
 them from Supabase in a separately authorized task. The development project has the
 reviewed Phase 1A migrations and passed the minimal API smoke test. See `supabase.md`
-for policy details and deployment checks. Hosted browser/cookie checks remain pending.
+for policy details and deployment checks. Phase 1C SQL remains undeployed; see
+`phase-1c.md` for its controller, contracts, isolated tests, and approval boundaries.
+Hosted browser/cookie checks remain pending.
 
 The `/create`, `/join?code=…`, and `/rooms/[roomId]` routes use server-rendered public
 shells and client-side authenticated operations. No room details enter server HTML
-or metadata. Forms reuse validation, session helpers, and RPC adapters. Lobby reads
-recheck identity and membership; session changes invalidate stale results. Polling
-allows one request cycle per identity generation and pauses while hidden.
+or metadata. Forms reuse validation, session helpers, and RPC adapters. Room snapshots
+recheck identity and membership; session changes invalidate stale results. One
+controller coalesces reads, compares decimal-string versions, subscribes to the
+caller's membership-bound private Broadcast channel, and refreshes on subscription.
+Notifications only invalidate; rendered data comes from RLS snapshots. Polling
+repairs missed events every 15 seconds while visible. Reconnect, visibility, and
+online events refresh; navigation releases only owned subscription leases.
 QR encoding is local (`qrcode`); links never go to a third-party QR service.
 See `phase-1b.md` for creation uncertainty and recovery behavior.
 
@@ -67,7 +73,9 @@ No contribution, AI, media, conversation, or voting feature directories are crea
 
 A second migration enforces per-Auth-user fixed-window request budgets and retained
 room/member quotas using private administrator-only tables. Requests lock configuration,
-then the actor counter, then the target room; future write RPCs must preserve this order.
+then the actor counter, then the target room. Phase 1C start locks only the room and
+does not subsequently acquire configuration/actor locks. Privileged membership
+maintenance must lock affected rooms in UUID order before changing member rows.
 Domain rejections return error_code so failed attempts remain counted after commit.
 Adapters turn those outcomes into failures. Transactional faults/timeouts roll back.
 RPC locks time out after 2 seconds; PostgREST RPC statements default to 5 seconds,
