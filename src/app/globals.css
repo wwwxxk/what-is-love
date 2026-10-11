@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/* Change visual identity here without changing feature logic. */
+:root {
+  --paper: #faf9f6;
+  --ink: #25242b;
+  --muted: #62616c;
+  --line: #dfdde2;
+  --accent: #6350a6;
+  --accent-soft: #ece7f6;
+  --font-body: Arial, Helvetica, sans-serif;
+  --control-radius: 0.75rem;
+  --control-height: 3.25rem;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: var(--font-body);
+  --radius-control: var(--control-radius);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--accent-soft); color: var(--ink); }
+
+.eyebrow { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+
+.button {
+  display: inline-flex;
+  min-height: var(--control-height);
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--control-radius);
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.button--primary { background: var(--accent); color: #fff; }
+.button--secondary { background: transparent; color: var(--ink); border-color: var(--line); }
+.button:disabled { cursor: not-allowed; }
+.button:focus-visible, .skip-link:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.skip-link { position: fixed; top: 1rem; left: 1rem; z-index: 10; transform: translateY(-200%); border-radius: var(--control-radius); background: var(--ink); color: var(--paper); padding: 0.75rem 1rem; }
+.skip-link:focus { transform: translateY(0); }
+
+@media (forced-colors: active) {
+  .button { border: 1px solid ButtonText; }
+}
