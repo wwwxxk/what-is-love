@@ -1,5 +1,5 @@
 import { RobotIllustration } from "@/components/home/robot-illustration";
-import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 import { ArrowIcon } from "@/components/ui/arrow-icon";
 import { Container } from "@/components/ui/container";
 import { contributionDimensions, site } from "@/lib/config/site";
@@ -24,10 +24,10 @@ export default function Home() {
               <p className="mt-4 max-w-md leading-relaxed text-muted">An invitation to share the people, places, and little moments that make us feel we belong.</p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Button disabled aria-describedby="room-availability">Create a Robot <ArrowIcon /></Button>
-                <Button variant="secondary" disabled aria-describedby="room-availability">Join a Robot <ArrowIcon /></Button>
+                <ButtonLink href="/create">Create a Robot <ArrowIcon /></ButtonLink>
+                <ButtonLink href="/join" variant="secondary">Join a Robot <ArrowIcon /></ButtonLink>
               </div>
-              <p id="room-availability" className="mt-3 text-sm text-muted">Coming in the next phase · Room creation and joining are not available yet.</p>
+              <p className="mt-3 text-sm text-muted">Start a room, invite your people, and wait together.</p>
             </div>
             <div className="mx-auto w-full max-w-[280px] sm:max-w-[340px] md:max-w-[400px]">
               <RobotIllustration />

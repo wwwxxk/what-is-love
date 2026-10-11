@@ -9,10 +9,12 @@ type RoomClient = SupabaseClient<Database>;
 
 export class RoomOperationError extends Error {
   readonly code: string | undefined;
-  constructor(message: string, code?: string) {
+  readonly confirmedRoomId: string | undefined;
+  constructor(message: string, code?: string, confirmedRoomId?: string) {
     super(message);
     this.name = "RoomOperationError";
     this.code = code;
+    this.confirmedRoomId = confirmedRoomId;
   }
 }
 
@@ -69,7 +71,21 @@ export async function createRoom(client: RoomClient, input: CreateRoomInput): Pr
   await requireParticipant(client);
   const { data, error } = await client.rpc("create_robot_room", { p_nickname: nickname }).single();
   if (error || !data) throw new RoomOperationError("Unable to create the room. Confirm the reviewed migrations are applied, then retry.", error?.code);
-  return loadMembership(client, requireSuccessfulRpc(data));
+  const result = requireSuccessfulRpc(data);
+  try {
+    return await loadMembership(client, result);
+  } catch {
+    throw new RoomOperationError("Your room was created, but its details could not be loaded. Open the waiting lobby to recover it.", undefined, result.room_id);
+  }
+}
+
+/** Recovery reads only rooms owned by the verified caller; RLS remains authoritative. */
+export async function getCreatedRooms(client: RoomClient): Promise<Room[]> {
+  const participant = await requireParticipant(client);
+  const { data, error } = await client.from("rooms").select("*")
+    .eq("created_by", participant.userId).order("created_at", { ascending: false }).limit(20);
+  if (error) throw new RoomOperationError("Unable to retrieve your created rooms.", error.code);
+  return data;
 }
 
 export async function joinRoom(client: RoomClient, input: JoinRoomInput): Promise<RoomMembership> {

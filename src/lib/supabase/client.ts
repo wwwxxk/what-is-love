@@ -10,5 +10,7 @@ export function getSupabaseBrowserClient() {
   const config = requireSupabaseConfig();
   return createBrowserClient<Database>(config.url, config.publishableKey, {
     cookieOptions: getSessionCookieOptions(),
+    // A transport failure must reach the UI; never retry an uncertain admission.
+    db: { retry: false },
   });
 }

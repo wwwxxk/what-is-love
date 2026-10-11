@@ -2,11 +2,12 @@
 
 A collaborative transmedia storytelling experience about love and belonging.
 
-Phase 1A adds a version-controlled backend foundation: SQL migrations, anonymous Auth
-session helpers, cookie refresh, RLS, and typed room creation/joining/read operations.
-The migrations have **not been applied to the live Supabase project**. The Phase 0
-homepage is unchanged; both actions remain disabled. Room UI, contributions,
-realtime subscriptions, and AI are not implemented.
+Phase 1B implements **Welcome → Create / Join → Waiting Lobby** using the Phase 1A
+anonymous Auth, RLS, and room RPC foundation. The reviewed migrations were applied
+to the development Supabase project and passed the approved minimal API smoke test.
+Homepage actions now navigate to functional flows. Lobby membership is refreshed
+every 15 seconds while visible, with manual refresh. Supabase Realtime, phase
+transitions, contributions, and AI are not implemented.
 
 ## Development
 
@@ -62,17 +63,24 @@ npm run lint
 npm run typecheck
 npm test
 npm run test:db # Requires Docker; runs against an isolated disposable PostgreSQL 17
+npm run test:browser # Requires Python Playwright and Chromium; local fixtures only
 npm run build
 npm start
 ```
 
-`npm test` runs 34 checks for environment validation, room status/code/nickname
-validation, verified session recovery, RPC argument boundaries, and cookie/cache
-handling. Auth transport in these unit tests uses test-only contract fixtures.
+`npm test` runs 45 checks for environment validation, room status/code/nickname
+validation, verified session recovery, RPC argument boundaries, cookie/cache handling,
+creation uncertainty, and lobby access. Auth transport uses test-only fixtures.
 `npm run test:db` runs 28 checks against real PostgreSQL in a network-isolated,
 ephemeral Docker container: migrations, RLS, privileges, concurrency, unique
 membership, collision retries, and rollback. It never reads a live database URL.
 No live Supabase project is contacted. See `docs/supabase.md` for coverage limits.
+`npm run test:browser` builds with a local fixture URL/key and starts its own servers
+on ports 44116/44117. It blocks non-loopback browser requests; outputs go to `/tmp`.
+It requires Python Playwright and Chromium, already available in this cloud runtime.
+Because that build embeds fixture configuration, rebuild with your intended public
+configuration before using `npm start` afterward. `npm run dev` reads the current
+environment independently. See [Phase 1B](docs/phase-1b.md) for routes and limitations.
 `npm start` serves the production build on port 3000. Stop the development server
 before starting production on the same port. To use another port:
 `npm run dev -- --port 3001` or `npm start -- --port 3001`.
@@ -94,7 +102,7 @@ These `NEXT_PUBLIC_` values are intentionally public and included in browser bui
 Never put database passwords, service-role keys, Supabase secret keys, or future AI
 API secrets in public variables. `.env.local` and other `.env.*` files are ignored;
 only the placeholder `.env.example` is tracked. Public configuration must be present
-at build time when a future browser feature uses it.
+at build time for the browser room flows.
 
 `src/lib/config/env.ts` validates configuration on demand. Its optional reader returns
 `null` when both values are absent or still placeholders; client factories use the
@@ -117,7 +125,9 @@ Review both migrations, in order: `20261011000000_room_foundation.sql`, then
 `20261011010000_room_security_hardening.sql`, and
 [Supabase setup and security](docs/supabase.md) before applying anything. Enable
 Anonymous Sign-Ins in Supabase project settings before live Auth testing. Adding
-credentials alone does not apply migrations or enable homepage room actions.
+credentials alone does not apply migrations. Do not reapply the already deployed
+migrations to the same project. SQL Editor deployment still requires separately
+approved migration-history reconciliation before future CLI migrations.
 No storage buckets, realtime publication changes, or AI integrations are created.
 Database-enforced create/join limits default to 5 attempts/10 minutes and 20/minute
 per authenticated UUID. Private administrator configuration sets quotas of 3 retained
@@ -134,6 +144,7 @@ src/
   app/                 App Router pages, root layout, global design tokens
   components/
     home/              Homepage artwork and presentation
+    rooms/             Create/join forms, recovery, and authenticated waiting lobby
     ui/                Reusable Button and Container
   features/
     auth/              Verified anonymous participant/session helpers
@@ -142,8 +153,8 @@ src/
     config/            Site metadata, six dimension identifiers, environment validation
     supabase/          Typed clients, database types, cookie refresh transport
   proxy.ts             Next.js session refresh entry point
-supabase/migrations/   Schema, RLS, and trusted create/join RPCs (not applied live)
-tests/                 Unit tests and isolated PostgreSQL policy tests
+supabase/migrations/   Deployed Phase 1A schema, RLS, and trusted create/join RPCs
+tests/                 Unit, isolated PostgreSQL, and local fixture browser tests
 docs/                  Architecture and Supabase review/application instructions
 ```
 
@@ -153,8 +164,8 @@ no animation library. Decorative artwork is independent of application logic.
 
 ## Next phase
 
-Review and approve both migrations first, apply them to a staging Supabase project,
-enable anonymous Auth, and run the multi-client live checks in `docs/supabase.md`.
-After those pass, build the create/join UI and waiting lobby, configure Auth abuse protection and
-CAPTCHA before public use, and introduce room-scoped realtime membership. Keep
-the existing actions disabled until their real workflows are available.
+Review Phase 1B, then separately authorize hosted browser checks and test records.
+Phase 1C can add room-scoped Realtime membership and reviewed organizer phase
+transitions. Resolve hosted browser certificate trust and configure Auth abuse
+protection and a supported CAPTCHA flow before public use. Keep later storytelling
+features outside the room admission/lobby foundation.

@@ -1,8 +1,10 @@
 # Supabase Phase 1A — security and connection guide
 
-No migration or setting has been applied to the live project. The homepage and
-its disabled create/join actions remain unchanged. Approval is required before
-live configuration, migration, deployment, commits, pushes, or pull requests.
+The reviewed Phase 1A migrations were applied to the verified development project
+through the Dashboard SQL Editor, Anonymous Sign-Ins were enabled, and the approved
+minimal API smoke test passed. Migration history has not been reconciled. Phase 1B
+adds create/join/lobby UI without database changes. Further live tests, configuration,
+migrations, deployment, commits, pushes, or pull requests require approval.
 
 ## Migrations: exact order
 
@@ -167,7 +169,7 @@ cache headers even if a cookie callback supplies public cache headers. The serve
 client is request-scoped and server-only; future Route Handlers must attach its
 mutable response headers to the actual returned Response. Do not use this writable
 adapter in Server Components. Personal data must never be statically rendered or
-cached across users. The unchanged public homepage contains no personal data and
+cached across users. The public homepage contains no personal data and
 makes no Auth request without an existing cookie.
 
 `ensureAnonymousParticipant` first verifies any existing session, then coordinates
@@ -251,8 +253,8 @@ requires separate approval; no cleanup operation is run by installation/startup.
    Room, RoomParticipant, and RoomRpcResult aliases used by adapters. These types
    currently mirror SQL manually and are not claimed to be generated from a live DB.
 8. Run the hosted checklist below with an SDK harness/PostgREST and independent
-   browser profiles. Phase 1A buttons remain disabled. Connecting settings alone
-   does not enable workflows, and no Phase 1B UI is included.
+   browser profiles only after approval. Phase 1B now provides create/join/lobby UI;
+   connecting settings alone does not verify hosted workflows. See `phase-1b.md`.
 
 Read-only verification after approved application:
 

@@ -1,11 +1,11 @@
-# Application architecture — Phase 1A
+# Application architecture — Phase 1B
 
 The homepage is a static Server Component. It renders site configuration and small
 presentation components; it does not create a Supabase client. Missing credentials
 must never prevent the initial homepage from building or rendering.
 
-The Phase 1A foundation adds `src/features/auth` and `src/features/rooms` without
-changing the homepage. Auth helpers restore verified identity or explicitly create
+The Phase 1A foundation adds `src/features/auth` and `src/features/rooms`.
+Auth helpers restore verified identity or explicitly create
 an anonymous session. Room adapters use typed, authenticated Supabase clients and
 reviewed RPCs; they never write tables directly. The database is the authorization
 boundary. Nicknames and invitation codes do not establish authenticated identity.
@@ -30,8 +30,8 @@ styling or animation. Keep any future animation behavior in presentation compone
 
 | Feature | Responsibility |
 | --- | --- |
-| rooms | Create/join/read data foundation implemented; UI and lifecycle operations remain future work |
-| auth / participants | Anonymous identity/session helpers and membership schema implemented; recovery UI remains future work |
+| rooms | Create/join/read foundation and waiting UI implemented; lifecycle operations remain future work |
+| auth / participants | Anonymous identity/session helpers, membership schema, and explicit recovery UI implemented |
 | tasks | Assignment and card drawing |
 | contributions | Shared contribution contracts; separate who, what, when, where, how, feeling modules |
 | gallery | Room-scoped memory display and media access |
@@ -49,10 +49,17 @@ of truth. Resolve concurrent state transitions on the server/database.
 
 The migrations and policy tests now define the initial room/participant model and
 invitation rules. Database types currently mirror that migration manually; regenerate
-them from Supabase after reviewed application. No live schema changes have occurred.
-See `supabase.md` for policy details and deployment checks. Next, validate the hosted
-Auth/PostgREST/cookie boundary, then implement create/join, errors, reconnect behavior,
-and realtime membership. Keep both homepage buttons disabled until workflows exist.
+them from Supabase in a separately authorized task. The development project has the
+reviewed Phase 1A migrations and passed the minimal API smoke test. See `supabase.md`
+for policy details and deployment checks. Hosted browser/cookie checks remain pending.
+
+The `/create`, `/join?code=…`, and `/rooms/[roomId]` routes use server-rendered public
+shells and client-side authenticated operations. No room details enter server HTML
+or metadata. Forms reuse validation, session helpers, and RPC adapters. Lobby reads
+recheck identity and membership; session changes invalidate stale results. Polling
+allows one request cycle per identity generation and pauses while hidden.
+QR encoding is local (`qrcode`); links never go to a third-party QR service.
+See `phase-1b.md` for creation uncertainty and recovery behavior.
 
 No contribution, AI, media, conversation, or voting feature directories are created.
 
